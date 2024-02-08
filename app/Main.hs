@@ -1,6 +1,7 @@
 module Main where
 
 import Data.Bits
+import qualified Data.ByteString.Lazy as BS
 import Data.Vector
 import qualified Data.Vector as V
 import Data.Word
@@ -47,14 +48,22 @@ data VM = MakeVM
     soundReg :: Word8,
     timerReg :: Word8,
     displayBuffer :: Vector Bool,
-    program :: Vector Word8
+    program :: [Word8]
   }
   deriving (Show)
 
-initVM :: Vector Word8 -> VM
+initMemory :: Vector Word8
+initMemory = (V.++) fonts uninitialized
+  where
+    fonts = V.fromList [0xF0, 0x90, 0x90, 0x90, 0xF0, 0x20, 0x60, 0x20, 0x20, 0x70, 0xF0, 0x10, 0xF0, 0x80, 0xF0, 0xF0, 0x10, 0xF0, 0x10, 0xF0, 0x90, 0x90, 0xF0, 0x10, 0x10, 0xF0, 0x80, 0xF0, 0x10, 0xF0, 0xF0, 0x80, 0xF0, 0x90, 0xF0, 0xF0, 0x10, 0x20, 0x40, 0x40, 0xF0, 0x90, 0xF0, 0x90, 0xF0, 0xF0, 0x90, 0xF0, 0x10, 0xF0, 0xF0, 0x90, 0xF0, 0x90, 0x90, 0xE0, 0x90, 0xE0, 0x90, 0xE0, 0xF0, 0x80, 0x80, 0x80, 0xF0, 0xE0, 0x90, 0x90, 0x90, 0xE0, 0xF0, 0x80, 0xF0, 0x80, 0xF0, 0xF0, 0x80, 0xF0, 0x80, 0x80]
+    fontsSize = V.length fonts
+    memorySize = 0x1000
+    uninitialized = V.replicate (memorySize - fontsSize) 0
+
+initVM :: [Word8] -> VM
 initVM _program =
   MakeVM
-    { memory = V.replicate 0x1000 0,
+    { memory = initMemory,
       --  Most Chip-8 programs start at location 0x200 (512), but some begin at 0x600 (1536). Programs beginning at 0x600 are intended for the ETI 660 computer.
       pc = 0x200,
       sp = 0xF,
@@ -72,8 +81,8 @@ opCode vm = (opCodeHi, opCodeLo)
   where
     _program = program vm
     _pc = pc vm
-    opCodeHi = (V.!) _program $ fromIntegral _pc
-    opCodeLo = (V.!) _program $ fromIntegral (_pc + 1)
+    opCodeHi = (!!) _program $ fromIntegral _pc
+    opCodeLo = (!!) _program $ fromIntegral (_pc + 1)
 
 withPC :: Word16 -> VM -> VM
 withPC newPC vm = vm {pc = newPC}
@@ -241,5 +250,6 @@ updateVM = updateTimers . updateInstruction
 
 main :: IO ()
 main = do
-  let vm = updateVM $ initVM (V.replicate 0x400 0)
+  _program <- BS.unpack <$> BS.readFile "roms/spaceinvader.ch8"
+  let vm = updateVM $ initVM _program
   putStrLn ("Hello, Haskell!" Prelude.++ show (pc vm))
