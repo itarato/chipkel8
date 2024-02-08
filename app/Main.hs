@@ -60,6 +60,9 @@ initMemory = (V.++) fonts uninitialized
     memorySize = 0x1000
     uninitialized = V.replicate (memorySize - fontsSize) 0
 
+initDisplayBuffer :: Vector Bool
+initDisplayBuffer = V.replicate displayBufferSize False
+
 initVM :: [Word8] -> VM
 initVM _program =
   MakeVM
@@ -72,7 +75,7 @@ initVM _program =
       iReg = 0,
       soundReg = 0,
       timerReg = 0,
-      displayBuffer = V.replicate displayBufferSize False,
+      displayBuffer = initDisplayBuffer,
       program = _program
     }
 
@@ -90,6 +93,27 @@ withPC newPC vm = vm {pc = newPC}
 withPCInc :: VM -> VM
 withPCInc vm = let _pc = pc vm in vm {pc = _pc + 2}
 
+withClearedDisplay :: VM -> VM
+withClearedDisplay vm = vm {displayBuffer = initDisplayBuffer}
+
+withReturnFromStack :: VM -> VM
+withReturnFromStack vm = vm {pc = newPC, sp = newSP}
+  where
+    _pc = pc vm
+    _sp = sp vm
+    _stack = stack vm
+    newPC = (V.!) _stack (fromIntegral _sp - 1)
+    newSP = _sp - 1
+
+withCall :: Word16 -> VM -> VM
+withCall addr vm = vm {pc = addr, sp = newSP, stack = newStack}
+  where
+    _pc = pc vm
+    _sp = sp vm
+    _stack = stack vm
+    newStack = (V.//) _stack [(fromIntegral _sp, _pc)]
+    newSP = _sp + 1
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -105,19 +129,19 @@ updateInstruction vm
   | opCodeHiNibHi == 0 = withPC opCodeLo3Nibs vm
   -- 00E0 - CLS
   -- Clear the display.
-
+  | opCodeWord == 0x00E0 = withClearedDisplay . withPCInc $ vm
   -- 00EE - RET
   -- Return from a subroutine.
   -- The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
-
+  | opCodeWord == 0x00EE = withReturnFromStack vm
   -- 1nnn - JP addr
   -- Jump to location nnn.
   -- The interpreter sets the program counter to nnn.
-
+  | opCodeHiNibHi == 1 = withPC opCodeLo3Nibs vm
   -- 2nnn - CALL addr
   -- Call subroutine at nnn.
   -- The interpreter increments the stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn.
-
+  | opCodeHiNibHi == 2 = withCall opCodeLo3Nibs . withPCInc $ vm
   -- 3xkk - SE Vx, byte
   -- Skip next instruction if Vx = kk.
   -- The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2.
