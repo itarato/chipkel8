@@ -171,6 +171,65 @@ withOrTwoRegs lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
     rhsRegVal = (V.!) _regs rhsRegIdx
     newRegs = (V.//) _regs [(lhsRegIdx, (.|.) lhsRegVal rhsRegVal)]
 
+withAndTwoRegs :: Int -> Int -> VM -> VM
+withAndTwoRegs lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newRegs = (V.//) _regs [(lhsRegIdx, (.&.) lhsRegVal rhsRegVal)]
+
+withXorTwoRegs :: Int -> Int -> VM -> VM
+withXorTwoRegs lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newRegs = (V.//) _regs [(lhsRegIdx, xor lhsRegVal rhsRegVal)]
+
+withAddRegsWithCarry :: Int -> Int -> VM -> VM
+withAddRegsWithCarry lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newVF = if (255 :: Word8) - lhsRegVal < rhsRegVal then 1 else 0
+    newRegs = (V.//) _regs [(lhsRegIdx, lhsRegVal + rhsRegVal), (0xF, newVF)]
+
+withSubRegsWithBorrow :: Int -> Int -> VM -> VM
+withSubRegsWithBorrow lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newVF = if lhsRegVal > rhsRegVal then 1 else 0
+    newRegs = (V.//) _regs [(lhsRegIdx, lhsRegVal - rhsRegVal), (0xF, newVF)]
+
+withSubRegsReverseWithBorrow :: Int -> Int -> VM -> VM
+withSubRegsReverseWithBorrow lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newVF = if rhsRegVal > lhsRegVal then 1 else 0
+    newRegs = (V.//) _regs [(lhsRegIdx, rhsRegVal - lhsRegVal), (0xF, newVF)]
+
+withShiftRightReg :: Int -> VM -> VM
+withShiftRightReg regIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    regVal = (V.!) _regs regIdx
+    newVF = (.&.) regVal 1
+    newRegs = (V.//) _regs [(regIdx, shiftR regVal 1), (0xF, newVF)]
+
+withShiftLeftReg :: Int -> VM -> VM
+withShiftLeftReg regIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    regVal = (V.!) _regs regIdx
+    newVF = (.&.) regVal 0x80
+    newRegs = (V.//) _regs [(regIdx, shiftL regVal 1), (0xF, newVF)]
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -230,31 +289,31 @@ updateInstruction vm
   -- 8xy2 - AND Vx, Vy
   -- Set Vx = Vx AND Vy.
   -- Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx. A bitwise AND compares the corrseponding bits from two values, and if both bits are 1, then the same bit in the result is also 1. Otherwise, it is 0.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 2 = withAndTwoRegs (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) . withPCInc $ vm
   -- 8xy3 - XOR Vx, Vy
   -- Set Vx = Vx XOR Vy.
   -- Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx. An exclusive OR compares the corrseponding bits from two values, and if the bits are not both the same, then the corresponding bit in the result is set to 1. Otherwise, it is 0.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 3 = withXorTwoRegs (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) . withPCInc $ vm
   -- 8xy4 - ADD Vx, Vy
   -- Set Vx = Vx + Vy, set VF = carry.
   -- The values of Vx and Vy are added together. If the result is greater than 8 bits (i.e., > 255,) VF is set to 1, otherwise 0. Only the lowest 8 bits of the result are kept, and stored in Vx.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 4 = withAddRegsWithCarry (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) . withPCInc $ vm
   -- 8xy5 - SUB Vx, Vy
   -- Set Vx = Vx - Vy, set VF = NOT borrow.
   -- If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 5 = withSubRegsWithBorrow (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) . withPCInc $ vm
   -- 8xy6 - SHR Vx {, Vy}
   -- Set Vx = Vx SHR 1.
   -- If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 6 = withShiftRightReg (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- 8xy7 - SUBN Vx, Vy
   -- Set Vx = Vy - Vx, set VF = NOT borrow.
   -- If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 7 = withSubRegsReverseWithBorrow (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) . withPCInc $ vm
   -- 8xyE - SHL Vx {, Vy}
   -- Set Vx = Vx SHL 1.
   -- If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 0xE = withShiftLeftReg (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- 9xy0 - SNE Vx, Vy
   -- Skip next instruction if Vx != Vy.
   -- The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2.
