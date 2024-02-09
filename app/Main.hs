@@ -41,6 +41,10 @@ displayBufferSize = 64 * 32
 data VM = MakeVM
   { memory :: Vector Word8,
     pc :: Word16,
+    -- Stack pointer is always pointing to top+1.
+    -- Push must be stack[sp]=v;sp++.
+    -- Pop must be sp--;v=stack[sp].
+    -- Stack cleanup not necessary.
     sp :: Word8,
     stack :: Vector Word16,
     regs :: Vector Word8,
@@ -130,6 +134,21 @@ withSkipInstructionIfRegNotEqual regIdx cmp vm = vm {pc = newPC}
     regVal = (V.!) _regs regIdx
     newPC = if regVal == cmp then _pc + 2 else _pc + 4
 
+withSkipInstructionIfTwoRegsEqual :: Int -> Int -> VM -> VM
+withSkipInstructionIfTwoRegsEqual lhsRegIdx rhsRegIdx vm = vm {pc = newPC}
+  where
+    _pc = pc vm
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newPC = if lhsRegVal == rhsRegVal then _pc + 4 else _pc + 2
+
+withLoadValueToReg :: Int -> Word8 -> VM -> VM
+withLoadValueToReg regIdx value vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    newRegs = (V.//) _regs [(regIdx, value)]
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -165,15 +184,15 @@ updateInstruction vm
   -- 4xkk - SNE Vx, byte
   -- Skip next instruction if Vx != kk.
   -- The interpreter compares register Vx to kk, and if they are not equal, increments the program counter by 2.
-  | opCodeHiNibHi == 3 = withSkipInstructionIfRegNotEqual (fromIntegral opCodeHiNibLo) opCodeLo vm
+  | opCodeHiNibHi == 4 = withSkipInstructionIfRegNotEqual (fromIntegral opCodeHiNibLo) opCodeLo vm
   -- 5xy0 - SE Vx, Vy
   -- Skip next instruction if Vx = Vy.
   -- The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
-
+  | opCodeHiNibHi == 5 = withSkipInstructionIfTwoRegsEqual (fromIntegral opCodeLoNibHi) (fromIntegral opCodeHiNibLo) vm
   -- 6xkk - LD Vx, byte
   -- Set Vx = kk.
   -- The interpreter puts the value kk into register Vx.
-
+  | opCodeHiNibHi == 6 = withLoadValueToReg (fromIntegral opCodeHiNibLo) opCodeLo . withPCInc $ vm
   -- 7xkk - ADD Vx, byte
   -- Set Vx = Vx + kk.
   -- Adds the value kk to the value of register Vx, then stores the result in Vx.
@@ -281,8 +300,9 @@ updateInstruction vm
   where
     _pc = pc vm
     (opCodeHi, opCodeLo) = opCode vm
-    opCodeHiNibHi = shiftR opCodeHi 4 -- 0xX...
+    opCodeHiNibHi = shiftR opCodeHi 4 --  0xX...
     opCodeHiNibLo = (.&.) opCodeHi 0xF -- 0x.X..
+    opCodeLoNibHi = shiftR opCodeLo 4 --  0x..X.
     opCodeWord = (.|.) (shiftL (fromIntegral opCodeHi :: Word16) 8) (fromIntegral opCodeLo :: Word16)
     opCodeLo3Nibs = (.&.) opCodeWord 0x0FFF -- 0x.XXX
 
