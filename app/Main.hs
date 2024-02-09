@@ -149,6 +149,28 @@ withLoadValueToReg regIdx value vm = vm {regs = newRegs}
     _regs = regs vm
     newRegs = (V.//) _regs [(regIdx, value)]
 
+withAddToReg :: Int -> Word8 -> VM -> VM
+withAddToReg regIdx inc vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    oldValue = (V.!) _regs regIdx
+    newRegs = (V.//) _regs [(regIdx, oldValue + inc)]
+
+withSetRegFromReg :: Int -> Int -> VM -> VM
+withSetRegFromReg lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newRegs = (V.//) _regs [(lhsRegIdx, rhsRegVal)]
+
+withOrTwoRegs :: Int -> Int -> VM -> VM
+withOrTwoRegs lhsRegIdx rhsRegIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newRegs = (V.//) _regs [(lhsRegIdx, (.|.) lhsRegVal rhsRegVal)]
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -188,7 +210,7 @@ updateInstruction vm
   -- 5xy0 - SE Vx, Vy
   -- Skip next instruction if Vx = Vy.
   -- The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
-  | opCodeHiNibHi == 5 = withSkipInstructionIfTwoRegsEqual (fromIntegral opCodeLoNibHi) (fromIntegral opCodeHiNibLo) vm
+  | opCodeHiNibHi == 5 && opCodeLoNibLo == 0 = withSkipInstructionIfTwoRegsEqual (fromIntegral opCodeLoNibHi) (fromIntegral opCodeHiNibLo) vm
   -- 6xkk - LD Vx, byte
   -- Set Vx = kk.
   -- The interpreter puts the value kk into register Vx.
@@ -196,15 +218,15 @@ updateInstruction vm
   -- 7xkk - ADD Vx, byte
   -- Set Vx = Vx + kk.
   -- Adds the value kk to the value of register Vx, then stores the result in Vx.
-
+  | opCodeHiNibHi == 7 = withAddToReg (fromIntegral opCodeHiNibLo) opCodeLo . withPCInc $ vm
   -- 8xy0 - LD Vx, Vy
   -- Set Vx = Vy.
   -- Stores the value of register Vy in register Vx.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 0 = withSetRegFromReg (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) . withPCInc $ vm
   -- 8xy1 - OR Vx, Vy
   -- Set Vx = Vx OR Vy.
   -- Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx. A bitwise OR compares the corrseponding bits from two values, and if either bit is 1, then the same bit in the result is also 1. Otherwise, it is 0.
-
+  | opCodeHiNibHi == 8 && opCodeLoNibLo == 1 = withOrTwoRegs (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) . withPCInc $ vm
   -- 8xy2 - AND Vx, Vy
   -- Set Vx = Vx AND Vy.
   -- Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx. A bitwise AND compares the corrseponding bits from two values, and if both bits are 1, then the same bit in the result is also 1. Otherwise, it is 0.
@@ -303,6 +325,7 @@ updateInstruction vm
     opCodeHiNibHi = shiftR opCodeHi 4 --  0xX...
     opCodeHiNibLo = (.&.) opCodeHi 0xF -- 0x.X..
     opCodeLoNibHi = shiftR opCodeLo 4 --  0x..X.
+    opCodeLoNibLo = (.&.) opCodeLo 0xF -- 0x...X
     opCodeWord = (.|.) (shiftL (fromIntegral opCodeHi :: Word16) 8) (fromIntegral opCodeLo :: Word16)
     opCodeLo3Nibs = (.&.) opCodeWord 0x0FFF -- 0x.XXX
 
