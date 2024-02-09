@@ -114,6 +114,22 @@ withCall addr vm = vm {pc = addr, sp = newSP, stack = newStack}
     newStack = (V.//) _stack [(fromIntegral _sp, _pc)]
     newSP = _sp + 1
 
+withSkipInstructionIfRegEqual :: Int -> Word8 -> VM -> VM
+withSkipInstructionIfRegEqual regIdx cmp vm = vm {pc = newPC}
+  where
+    _pc = pc vm
+    _regs = regs vm
+    regVal = (V.!) _regs regIdx
+    newPC = if regVal == cmp then _pc + 4 else _pc + 2
+
+withSkipInstructionIfRegNotEqual :: Int -> Word8 -> VM -> VM
+withSkipInstructionIfRegNotEqual regIdx cmp vm = vm {pc = newPC}
+  where
+    _pc = pc vm
+    _regs = regs vm
+    regVal = (V.!) _regs regIdx
+    newPC = if regVal == cmp then _pc + 2 else _pc + 4
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -145,11 +161,11 @@ updateInstruction vm
   -- 3xkk - SE Vx, byte
   -- Skip next instruction if Vx = kk.
   -- The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2.
-
+  | opCodeHiNibHi == 3 = withSkipInstructionIfRegEqual (fromIntegral opCodeHiNibLo) opCodeLo vm
   -- 4xkk - SNE Vx, byte
   -- Skip next instruction if Vx != kk.
   -- The interpreter compares register Vx to kk, and if they are not equal, increments the program counter by 2.
-
+  | opCodeHiNibHi == 3 = withSkipInstructionIfRegNotEqual (fromIntegral opCodeHiNibLo) opCodeLo vm
   -- 5xy0 - SE Vx, Vy
   -- Skip next instruction if Vx = Vy.
   -- The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
@@ -266,6 +282,7 @@ updateInstruction vm
     _pc = pc vm
     (opCodeHi, opCodeLo) = opCode vm
     opCodeHiNibHi = shiftR opCodeHi 4 -- 0xX...
+    opCodeHiNibLo = (.&.) opCodeHi 0xF -- 0x.X..
     opCodeWord = (.|.) (shiftL (fromIntegral opCodeHi :: Word16) 8) (fromIntegral opCodeLo :: Word16)
     opCodeLo3Nibs = (.&.) opCodeWord 0x0FFF -- 0x.XXX
 
