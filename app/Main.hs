@@ -42,9 +42,9 @@ displayBufferSize = 64 * 32
 data VM = MakeVM
   { memory :: Vector Word8,
     pc :: Word16,
-    -- Stack pointer is always pointing to top+1.
-    -- Push must be stack[sp]=v;sp++.
-    -- Pop must be sp--;v=stack[sp].
+    -- Stack pointer is always pointing to the top-1 (first) empty spot.
+    -- Push must be stack[sp]=v;sp--.
+    -- Pop must be sp++;v=stack[sp].
     -- Stack cleanup not necessary.
     sp :: Word8,
     stack :: Vector Word16,
@@ -107,8 +107,8 @@ withReturnFromStack vm = vm {pc = newPC, sp = newSP}
     _pc = pc vm
     _sp = sp vm
     _stack = stack vm
-    newPC = (V.!) _stack (fromIntegral _sp - 1)
-    newSP = _sp - 1
+    newPC = (V.!) _stack (fromIntegral _sp + 1)
+    newSP = _sp + 1
 
 withCall :: Word16 -> VM -> VM
 withCall addr vm = vm {pc = addr, sp = newSP, stack = newStack}
@@ -117,7 +117,7 @@ withCall addr vm = vm {pc = addr, sp = newSP, stack = newStack}
     _sp = sp vm
     _stack = stack vm
     newStack = (V.//) _stack [(fromIntegral _sp, _pc)]
-    newSP = _sp + 1
+    newSP = _sp - 1
 
 withSkipInstructionIfRegEqual :: Int -> Word8 -> VM -> VM
 withSkipInstructionIfRegEqual regIdx cmp vm = vm {pc = newPC}
@@ -143,6 +143,15 @@ withSkipInstructionIfTwoRegsEqual lhsRegIdx rhsRegIdx vm = vm {pc = newPC}
     lhsRegVal = (V.!) _regs lhsRegIdx
     rhsRegVal = (V.!) _regs rhsRegIdx
     newPC = if lhsRegVal == rhsRegVal then _pc + 4 else _pc + 2
+
+withSkipInstructionIfTwoRegsNotEqual :: Int -> Int -> VM -> VM
+withSkipInstructionIfTwoRegsNotEqual lhsRegIdx rhsRegIdx vm = vm {pc = newPC}
+  where
+    _pc = pc vm
+    _regs = regs vm
+    lhsRegVal = (V.!) _regs lhsRegIdx
+    rhsRegVal = (V.!) _regs rhsRegIdx
+    newPC = if lhsRegVal == rhsRegVal then _pc + 2 else _pc + 4
 
 withLoadValueToReg :: Int -> Word8 -> VM -> VM
 withLoadValueToReg regIdx value vm = vm {regs = newRegs}
@@ -231,6 +240,17 @@ withShiftLeftReg regIdx vm = vm {regs = newRegs}
     newVF = (.&.) regVal 0x80
     newRegs = (V.//) _regs [(regIdx, shiftL regVal 1), (0xF, newVF)]
 
+withRegISet :: Word16 -> VM -> VM
+withRegISet value vm = vm {iReg = value}
+
+withJumpValPlusV0 :: Word16 -> VM -> VM
+withJumpValPlusV0 value vm = vm {pc = newPC}
+  where
+    _pc = pc vm
+    _regs = regs vm
+    v0 = (V.!) _regs 0
+    newPC = (fromIntegral v0 :: Word16) + value
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -318,15 +338,15 @@ updateInstruction vm
   -- 9xy0 - SNE Vx, Vy
   -- Skip next instruction if Vx != Vy.
   -- The values of Vx and Vy are compared, and if they are not equal, the program counter is increased by 2.
-
+  | opCodeHiNibHi == 9 && opCodeLoNibLo == 0 = withSkipInstructionIfTwoRegsNotEqual (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) vm
   -- Annn - LD I, addr
   -- Set I = nnn.
   -- The value of register I is set to nnn.
-
+  | opCodeHiNibHi == 0xA = withRegISet opCodeLo3Nibs . withPCInc $ vm
   -- Bnnn - JP V0, addr
   -- Jump to location nnn + V0.
   -- The program counter is set to nnn plus the value of V0.
-
+  | opCodeHiNibHi == 0xB = withJumpValPlusV0 opCodeLo3Nibs vm
   -- Cxkk - RND Vx, byte
   -- Set Vx = random byte AND kk.
   -- The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk. The results are stored in Vx. See instruction 8xy2 for more information on AND.
