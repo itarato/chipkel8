@@ -6,6 +6,7 @@ import Data.Vector
 import qualified Data.Vector as V
 import Data.Word
 import Debug.Trace (trace)
+import Text.Printf
 
 {-
 
@@ -391,8 +392,14 @@ updateInstruction vm
 updateVM :: VM -> VM
 updateVM = updateTimers . updateInstruction
 
+debugVM :: VM -> IO ()
+debugVM vm = do
+  printf "PC: %04X SP: %d\n" (pc vm) (sp vm)
+  printf "Regs: %s\n" (show $ regs vm)
+  printf "Stack: %s\n" (show $ stack vm)
+
 main :: IO ()
 main = do
   _program <- BS.unpack <$> BS.readFile "roms/spaceinvader.ch8"
   let vm = updateVM $ initVM _program
-  putStrLn ("Hello, Haskell!" Prelude.++ show (pc vm))
+  debugVM vm
