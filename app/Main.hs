@@ -1,5 +1,6 @@
 module Main where
 
+import Control.Exception
 import Data.Bits
 import qualified Data.ByteString.Lazy as BS
 import Data.Vector
@@ -251,6 +252,46 @@ withJumpValPlusV0 value vm = vm {pc = newPC}
     v0 = (V.!) _regs 0
     newPC = (fromIntegral v0 :: Word16) + value
 
+withRandomReg :: Int -> Word8 -> VM -> VM
+withRandomReg = error "Not implemented"
+
+withDrawSprite :: Int -> Int -> Int -> VM -> VM
+withDrawSprite = error "Not implemented"
+
+withSetRegFromTimer :: Int -> VM -> VM
+withSetRegFromTimer regIdx vm = vm {regs = newRegs}
+  where
+    _regs = regs vm
+    _timerReg = timerReg vm
+    newRegs = (V.//) _regs [(regIdx, _timerReg)]
+
+withSetTimerFromReg :: Int -> VM -> VM
+withSetTimerFromReg regIdx vm = vm {timerReg = newTimerReg}
+  where
+    _regs = regs vm
+    newTimerReg = (V.!) _regs regIdx
+
+withSetSoundFromReg :: Int -> VM -> VM
+withSetSoundFromReg regIdx vm = vm {soundReg = newSoundReg}
+  where
+    _regs = regs vm
+    newSoundReg = (V.!) _regs regIdx
+
+withAddRegToRegI :: Int -> VM -> VM
+withAddRegToRegI regIdx vm = vm {iReg = newIReg}
+  where
+    _iReg = iReg vm
+    _regs = regs vm
+    value = (fromIntegral $ (V.!) _regs regIdx) :: Word16
+    newIReg = value + _iReg
+
+withSetIToSpriteLocation :: Int -> VM -> VM
+withSetIToSpriteLocation regIdx vm = vm {iReg = newIReg}
+  where
+    _regs = regs vm
+    value = (fromIntegral $ (V.!) _regs regIdx) :: Word16
+    newIReg = assert (value <= 0xF) value * 5
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -350,43 +391,48 @@ updateInstruction vm
   -- Cxkk - RND Vx, byte
   -- Set Vx = random byte AND kk.
   -- The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk. The results are stored in Vx. See instruction 8xy2 for more information on AND.
-
+  | opCodeHiNibHi == 0xC = withRandomReg (fromIntegral opCodeHiNibLo) opCodeLo . withPCInc $ vm
   -- Dxyn - DRW Vx, Vy, nibble
   -- Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
-  -- The interpreter reads n bytes from memory, starting at the address stored in I. These bytes are then displayed as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen. If this causes any pixels to be erased, VF is set to 1, otherwise it is set to 0. If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side of the screen. See instruction 8xy3 for more information on XOR, and section 2.4, Display, for more information on the Chip-8 screen and sprites.
-
+  -- The interpreter reads n bytes from memory, starting at the address stored in I.
+  -- These bytes are then displayed as sprites on screen at coordinates (Vx, Vy). Sprites are XORed onto the existing screen.
+  -- If this causes any pixels to be erased, VF is set to 1, otherwise it is set to 0.
+  -- If the sprite is positioned so part of it is outside the coordinates of the display, it wraps around to the opposite side of the screen.
+  -- See instruction 8xy3 for more information on XOR, and section 2.4, Display, for more information on the Chip-8 screen and sprites.
+  | opCodeHiNibHi == 0xD = withDrawSprite (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) (fromIntegral opCodeLoNibLo) . withPCInc $ vm
   -- Ex9E - SKP Vx
   -- Skip next instruction if key with the value of Vx is pressed.
   -- Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2.
-
+  | opCodeHiNibHi == 0xE && opCodeLo == 0x9E = error "Not implemented"
   -- ExA1 - SKNP Vx
   -- Skip next instruction if key with the value of Vx is not pressed.
   -- Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2.
-
+  | opCodeHiNibHi == 0xE && opCodeLo == 0xA1 = error "Not implemented"
   -- Fx07 - LD Vx, DT
   -- Set Vx = delay timer value.
   -- The value of DT is placed into Vx.
-
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x07 = withSetRegFromTimer (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx0A - LD Vx, K
   -- Wait for a key press, store the value of the key in Vx.
   -- All execution stops until a key is pressed, then the value of that key is stored in Vx.
-
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x0A = error "Not implemented"
   -- Fx15 - LD DT, Vx
   -- Set delay timer = Vx.
   -- DT is set equal to the value of Vx.
-
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x15 = withSetTimerFromReg (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx18 - LD ST, Vx
   -- Set sound timer = Vx.
   -- ST is set equal to the value of Vx.
-
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x18 = withSetSoundFromReg (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx1E - ADD I, Vx
   -- Set I = I + Vx.
   -- The values of I and Vx are added, and the results are stored in I.
-
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x1E = withAddRegToRegI (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx29 - LD F, Vx
   -- Set I = location of sprite for digit Vx.
-  -- The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx. See section 2.4, Display, for more information on the Chip-8 hexadecimal font.
-
+  -- The value of I is set to the location for the hexadecimal sprite corresponding to the value of Vx. See section 2.4,
+  -- Display, for more information on the Chip-8 hexadecimal font.
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x29 = withSetIToSpriteLocation (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx33 - LD B, Vx
   -- Store BCD representation of Vx in memory locations I, I+1, and I+2.
   -- The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
