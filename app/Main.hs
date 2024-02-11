@@ -313,6 +313,17 @@ withSaveRegsToMemory regIdx vm = vm {memory = newMemory}
     changeset = Prelude.zip ((+ _iReg) <$> [0 .. (regIdx - 1)]) (toList _regs)
     newMemory = (V.//) _memory changeset
 
+withSaveMemoryToRegs :: Int -> VM -> VM
+withSaveMemoryToRegs regIdx vm = vm {regs = newRegs}
+  where
+    _iReg = fromIntegral $ iReg vm
+    _memory = memory vm
+    _regs = regs vm
+    range = [0 .. (regIdx - 1)]
+    values = (V.!) _memory <$> ((+ _iReg) <$> range)
+    changeset = Prelude.zip range values
+    newRegs = (V.//) _regs changeset
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -466,6 +477,7 @@ updateInstruction vm
   -- Fx65 - LD Vx, [I]
   -- Read registers V0 through Vx from memory starting at location I.
   -- The interpreter reads values from memory starting at location I into registers V0 through Vx.
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x65 = withSaveMemoryToRegs (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   | otherwise = trace ("Opcode not implemented" Prelude.++ show opCodeWord) vm
   where
     _pc = pc vm
