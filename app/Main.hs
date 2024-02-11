@@ -292,6 +292,27 @@ withSetIToSpriteLocation regIdx vm = vm {iReg = newIReg}
     value = (fromIntegral $ (V.!) _regs regIdx) :: Word16
     newIReg = assert (value <= 0xF) value * 5
 
+withSetDecimalDigitsOfReg :: Int -> VM -> VM
+withSetDecimalDigitsOfReg regIdx vm = vm {memory = newMemory}
+  where
+    _memory = memory vm
+    _regs = regs vm
+    _iReg = fromIntegral $ iReg vm
+    value = (V.!) _regs regIdx
+    hundreds = div value 100
+    tens = div (mod value 100) 10
+    ones = mod value 10
+    newMemory = (V.//) _memory [(_iReg, hundreds :: Word8), (_iReg + 1, tens :: Word8), (_iReg + 2, ones :: Word8)]
+
+withSaveRegsToMemory :: Int -> VM -> VM
+withSaveRegsToMemory regIdx vm = vm {memory = newMemory}
+  where
+    _memory = memory vm
+    _regs = fromIntegral <$> regs vm
+    _iReg = fromIntegral $ iReg vm
+    changeset = Prelude.zip ((+ _iReg) <$> [0 .. (regIdx - 1)]) (toList _regs)
+    newMemory = (V.//) _memory changeset
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
@@ -435,12 +456,13 @@ updateInstruction vm
   | opCodeHiNibHi == 0xF && opCodeLo == 0x29 = withSetIToSpriteLocation (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx33 - LD B, Vx
   -- Store BCD representation of Vx in memory locations I, I+1, and I+2.
-  -- The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
-
+  -- The interpreter takes the decimal value of Vx, and places the hundreds digit in memory at location in I,
+  -- the tens digit at location I+1, and the ones digit at location I+2.
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x33 = withSetDecimalDigitsOfReg (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx55 - LD [I], Vx
   -- Store registers V0 through Vx in memory starting at location I.
   -- The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
-
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x55 = withSaveRegsToMemory (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   -- Fx65 - LD Vx, [I]
   -- Read registers V0 through Vx from memory starting at location I.
   -- The interpreter reads values from memory starting at location I into registers V0 through Vx.
