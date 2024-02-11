@@ -494,9 +494,10 @@ updateVM = updateTimers . updateInstruction
 
 debugVM :: VM -> IO ()
 debugVM vm = do
-  printf "PC: %04X SP: %d\n" (pc vm) (sp vm)
+  printf "PC: %04X I: %04X\n" (pc vm) (iReg vm)
+  printf "Tim: %02X Snd: %02X\n" (timerReg vm) (soundReg vm)
   printf "Regs: %s\n" (show $ regs vm)
-  printf "Stack: %s\n" (show $ stack vm)
+  printf "Stack: %s SP: %d\n" (show $ stack vm) (sp vm)
 
 main :: IO ()
 main = do
