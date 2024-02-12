@@ -6,7 +6,9 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Vector
 import qualified Data.Vector as V
 import Data.Word
-import Debug.Trace (trace)
+import Debug.Trace (trace, traceId, traceShowId)
+import Graphics.Gloss
+import Graphics.Gloss.Interface.IO.Interact
 import Text.Printf
 
 {-
@@ -37,42 +39,57 @@ Memory Map:
 
 -}
 
+displayWidth :: Int
+displayWidth = 64
+
+displayHeight :: Int
+displayHeight = 32
+
 displayBufferSize :: Int
-displayBufferSize = 64 * 32
+displayBufferSize = displayWidth * displayHeight
+
+pixelSize :: Int
+pixelSize = 4
 
 data VM = MakeVM
-  { memory :: Vector Word8,
+  { memory :: V.Vector Word8,
     pc :: Word16,
     -- Stack pointer is always pointing to the top-1 (first) empty spot.
     -- Push must be stack[sp]=v;sp--.
     -- Pop must be sp++;v=stack[sp].
     -- Stack cleanup not necessary.
     sp :: Word8,
-    stack :: Vector Word16,
-    regs :: Vector Word8,
+    stack :: V.Vector Word16,
+    regs :: V.Vector Word8,
     iReg :: Word16,
     soundReg :: Word8,
     timerReg :: Word8,
-    displayBuffer :: Vector Bool,
-    program :: [Word8]
+    displayBuffer :: V.Vector Bool
   }
   deriving (Show)
 
-initMemory :: Vector Word8
-initMemory = (V.++) fonts uninitialized
+initMemory :: [Word8] -> V.Vector Word8
+initMemory program = _memory
   where
     fonts = V.fromList [0xF0, 0x90, 0x90, 0x90, 0xF0, 0x20, 0x60, 0x20, 0x20, 0x70, 0xF0, 0x10, 0xF0, 0x80, 0xF0, 0xF0, 0x10, 0xF0, 0x10, 0xF0, 0x90, 0x90, 0xF0, 0x10, 0x10, 0xF0, 0x80, 0xF0, 0x10, 0xF0, 0xF0, 0x80, 0xF0, 0x90, 0xF0, 0xF0, 0x10, 0x20, 0x40, 0x40, 0xF0, 0x90, 0xF0, 0x90, 0xF0, 0xF0, 0x90, 0xF0, 0x10, 0xF0, 0xF0, 0x90, 0xF0, 0x90, 0x90, 0xE0, 0x90, 0xE0, 0x90, 0xE0, 0xF0, 0x80, 0x80, 0x80, 0xF0, 0xE0, 0x90, 0x90, 0x90, 0xE0, 0xF0, 0x80, 0xF0, 0x80, 0xF0, 0xF0, 0x80, 0xF0, 0x80, 0x80]
     fontsSize = V.length fonts
-    memorySize = 0x1000
-    uninitialized = V.replicate (memorySize - fontsSize) 0
+    prefixSize = 0x200
+    suffixSize = 0xE00
+    programSize = Prelude.length program
+    prefixUninitialized = V.replicate (prefixSize - fontsSize) 0
+    suffixUninitialized = V.replicate (suffixSize - programSize) 0
+    _program = V.fromList program
+    prefix = (V.++) fonts prefixUninitialized
+    suffix = (V.++) _program suffixUninitialized
+    _memory = (V.++) prefix suffix
 
-initDisplayBuffer :: Vector Bool
+initDisplayBuffer :: V.Vector Bool
 initDisplayBuffer = V.replicate displayBufferSize False
 
 initVM :: [Word8] -> VM
 initVM _program =
   MakeVM
-    { memory = initMemory,
+    { memory = initMemory _program,
       --  Most Chip-8 programs start at location 0x200 (512), but some begin at 0x600 (1536). Programs beginning at 0x600 are intended for the ETI 660 computer.
       pc = 0x200,
       sp = 0xF,
@@ -81,17 +98,16 @@ initVM _program =
       iReg = 0,
       soundReg = 0,
       timerReg = 0,
-      displayBuffer = initDisplayBuffer,
-      program = _program
+      displayBuffer = initDisplayBuffer
     }
 
 opCode :: VM -> (Word8, Word8)
 opCode vm = (opCodeHi, opCodeLo)
   where
-    _program = program vm
-    _pc = pc vm
-    opCodeHi = (!!) _program $ fromIntegral _pc
-    opCodeLo = (!!) _program $ fromIntegral (_pc + 1)
+    _memory = memory vm
+    _pc = fromIntegral $ pc vm
+    opCodeHi = (V.!) _memory _pc
+    opCodeLo = (V.!) _memory (_pc + 1)
 
 withPC :: Word16 -> VM -> VM
 withPC newPC vm = vm {pc = newPC}
@@ -333,10 +349,6 @@ updateTimers = id -- TODO: Implement
 
 updateInstruction :: VM -> VM
 updateInstruction vm
-  -- 0nnn - SYS addr
-  -- Jump to a machine code routine at nnn.
-  -- This instruction is only used on the old computers on which Chip-8 was originally implemented. It is ignored by modern interpreters.
-  | opCodeHiNibHi == 0 = withPC opCodeLo3Nibs vm
   -- 00E0 - CLS
   -- Clear the display.
   | opCodeWord == 0x00E0 = withClearedDisplay . withPCInc $ vm
@@ -344,6 +356,10 @@ updateInstruction vm
   -- Return from a subroutine.
   -- The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
   | opCodeWord == 0x00EE = withReturnFromStack vm
+  -- 0nnn - SYS addr
+  -- Jump to a machine code routine at nnn.
+  -- This instruction is only used on the old computers on which Chip-8 was originally implemented. It is ignored by modern interpreters.
+  | opCodeHiNibHi == 0 = withPC opCodeLo3Nibs vm
   -- 1nnn - JP addr
   -- Jump to location nnn.
   -- The interpreter sets the program counter to nnn.
@@ -480,8 +496,7 @@ updateInstruction vm
   | opCodeHiNibHi == 0xF && opCodeLo == 0x65 = withSaveMemoryToRegs (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   | otherwise = trace ("Opcode not implemented" Prelude.++ show opCodeWord) vm
   where
-    _pc = pc vm
-    (opCodeHi, opCodeLo) = opCode vm
+    (opCodeHi, opCodeLo) = traceOpcode (pc vm) $ opCode vm
     opCodeHiNibHi = shiftR opCodeHi 4 --  0xX...
     opCodeHiNibLo = (.&.) opCodeHi 0xF -- 0x.X..
     opCodeLoNibHi = shiftR opCodeLo 4 --  0x..X.
@@ -489,8 +504,14 @@ updateInstruction vm
     opCodeWord = (.|.) (shiftL (fromIntegral opCodeHi :: Word16) 8) (fromIntegral opCodeLo :: Word16)
     opCodeLo3Nibs = (.&.) opCodeWord 0x0FFF -- 0x.XXX
 
-updateVM :: VM -> VM
-updateVM = updateTimers . updateInstruction
+traceWithName :: (Show a) => String -> a -> a
+traceWithName msg v = trace (msg Prelude.++ ": " Prelude.++ show v) v
+
+traceOpcode :: Word16 -> (Word8, Word8) -> (Word8, Word8)
+traceOpcode _pc (a, b) = trace (printf "\x1B[93mPC\x1B[0m %04X \x1B[90m=>\x1B[0m \x1B[93mOP\x1B[0m %02X%02X" _pc a b) (a, b)
+
+updateVM :: Float -> VM -> VM
+updateVM elapsed = updateTimers . updateInstruction
 
 debugVM :: VM -> IO ()
 debugVM vm = do
@@ -499,8 +520,16 @@ debugVM vm = do
   printf "Regs: %s\n" (show $ regs vm)
   printf "Stack: %s SP: %d\n" (show $ stack vm) (sp vm)
 
+window :: Display
+window = InWindow "Chip8" (displayWidth * pixelSize, displayHeight * pixelSize) (100, 100)
+
+render :: VM -> Picture
+render vm = pictures []
+
+handleEvent :: Event -> VM -> VM
+handleEvent event vm = vm
+
 main :: IO ()
 main = do
   _program <- BS.unpack <$> BS.readFile "roms/spaceinvader.ch8"
-  let vm = updateVM $ initVM _program
-  debugVM vm
+  play window black 60 (initVM _program) render handleEvent updateVM
