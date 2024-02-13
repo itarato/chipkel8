@@ -3,6 +3,7 @@ module Main where
 import Control.Exception
 import Data.Bits
 import qualified Data.ByteString.Lazy as BS
+import Data.List.Extra
 import Data.Vector
 import qualified Data.Vector as V
 import Data.Word
@@ -64,7 +65,7 @@ data VM = MakeVM
     iReg :: Word16,
     soundReg :: Word8,
     timerReg :: Word8,
-    displayBuffer :: V.Vector Bool
+    displayBuffer :: V.Vector Word8
   }
   deriving (Show)
 
@@ -83,8 +84,8 @@ initMemory program = _memory
     suffix = (V.++) _program suffixUninitialized
     _memory = (V.++) prefix suffix
 
-initDisplayBuffer :: V.Vector Bool
-initDisplayBuffer = V.replicate displayBufferSize False
+initDisplayBuffer :: V.Vector Word8
+initDisplayBuffer = V.replicate displayBufferSize 0
 
 initVM :: [Word8] -> VM
 initVM _program =
@@ -100,6 +101,12 @@ initVM _program =
       timerReg = 0,
       displayBuffer = initDisplayBuffer
     }
+
+byteToBits :: Word8 -> [Word8]
+byteToBits byte = (\v -> if testBit byte v then 1 else 0) <$> [7, 6 .. 0]
+
+bitsToByte :: [Word8] -> Word8
+bitsToByte bits = Prelude.sum $ (\(b, i) -> b * bit i) <$> Prelude.zip bits [7, 6 .. 0]
 
 opCode :: VM -> (Word8, Word8)
 opCode vm = (opCodeHi, opCodeLo)
@@ -269,10 +276,28 @@ withJumpValPlusV0 value vm = vm {pc = newPC}
     newPC = (fromIntegral v0 :: Word16) + value
 
 withRandomReg :: Int -> Word8 -> VM -> VM
-withRandomReg = error "Not implemented"
+withRandomReg = error "Not implemented (withRandomReg)"
 
 withDrawSprite :: Int -> Int -> Int -> VM -> VM
-withDrawSprite = error "Not implemented"
+withDrawSprite x y n vm = vm {displayBuffer = newDisplayBuffer, regs = newRegs}
+  where
+    _iReg = fromIntegral $ iReg vm
+    _memory = memory vm
+    _displayBuffer = displayBuffer vm
+    _regs = regs vm
+    xCoord = fromIntegral $ (V.!) _regs x
+    yCoord = fromIntegral $ (V.!) _regs y
+    -- N bytes.
+    newBytes = (V.!) _memory . (+ _iReg) <$> [0 .. (n - 1)]
+    newBits = Prelude.concatMap byteToBits newBytes
+    displayIndices = Prelude.concatMap (\v -> (+ (displayWidth * mod (yCoord + v) displayHeight)) . flip mod displayWidth . (+ xCoord) <$> [0 .. 7]) [0 .. (n - 1)]
+    currentDiplayBits = (V.!) _displayBuffer <$> displayIndices
+    currentDisplayBytes = bitsToByte <$> chunksOf 8 currentDiplayBits
+    didErase = Prelude.any (\(a, b) -> (.&.) a b > 0) $ Prelude.zip newBytes currentDisplayBytes
+    newRegs = (V.//) _regs [(0xF, if didErase then 1 else 0)]
+    newDisplayBuffer = (V.//) _displayBuffer $ Prelude.zip displayIndices newBits
+
+-- currentBytes = (V.!) _memory
 
 withSetRegFromTimer :: Int -> VM -> VM
 withSetRegFromTimer regIdx vm = vm {regs = newRegs}
@@ -451,11 +476,11 @@ updateInstruction vm
   -- Ex9E - SKP Vx
   -- Skip next instruction if key with the value of Vx is pressed.
   -- Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2.
-  | opCodeHiNibHi == 0xE && opCodeLo == 0x9E = error "Not implemented"
+  | opCodeHiNibHi == 0xE && opCodeLo == 0x9E = error "Not implemented (Ex9E - SKP Vx)"
   -- ExA1 - SKNP Vx
   -- Skip next instruction if key with the value of Vx is not pressed.
   -- Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2.
-  | opCodeHiNibHi == 0xE && opCodeLo == 0xA1 = error "Not implemented"
+  | opCodeHiNibHi == 0xE && opCodeLo == 0xA1 = error "Not implemented (ExA1 - SKNP Vx)"
   -- Fx07 - LD Vx, DT
   -- Set Vx = delay timer value.
   -- The value of DT is placed into Vx.
@@ -463,7 +488,7 @@ updateInstruction vm
   -- Fx0A - LD Vx, K
   -- Wait for a key press, store the value of the key in Vx.
   -- All execution stops until a key is pressed, then the value of that key is stored in Vx.
-  | opCodeHiNibHi == 0xF && opCodeLo == 0x0A = error "Not implemented"
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x0A = error "Not implemented (Fx0A - LD Vx, K)"
   -- Fx15 - LD DT, Vx
   -- Set delay timer = Vx.
   -- DT is set equal to the value of Vx.
@@ -494,7 +519,7 @@ updateInstruction vm
   -- Read registers V0 through Vx from memory starting at location I.
   -- The interpreter reads values from memory starting at location I into registers V0 through Vx.
   | opCodeHiNibHi == 0xF && opCodeLo == 0x65 = withSaveMemoryToRegs (fromIntegral opCodeHiNibLo) . withPCInc $ vm
-  | otherwise = trace ("Opcode not implemented" Prelude.++ show opCodeWord) vm
+  | otherwise = trace ("Opcode not implemented: " Prelude.++ show opCodeWord) vm
   where
     (opCodeHi, opCodeLo) = traceOpcode (pc vm) $ opCode vm
     opCodeHiNibHi = shiftR opCodeHi 4 --  0xX...

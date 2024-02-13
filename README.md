@@ -4,6 +4,7 @@ Chip8 Emulator
 ## Setup
 
 - https://www.haskell.org/ghcup/
+- `sudo apt install freeglut3-dev`
 
 ## Use
 
