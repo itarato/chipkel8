@@ -1,13 +1,7 @@
 module Main where
 
 import Config
-import Control.Exception
-import Data.Bits
 import qualified Data.ByteString.Lazy as BS
-import Data.List.Extra
-import Data.Vector
-import qualified Data.Vector as V
-import Data.Word
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 import VM (VM, initVM, updateInstruction, updateTimers)
