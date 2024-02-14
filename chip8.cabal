@@ -102,5 +102,4 @@ Test-Suite test-vm
         base ^>=4.17.2.1,
         tasty == 1.5,
         tasty-hunit == 0.10.1,
-        tasty-quickcheck == 0.10.3,
-        tasty-smallcheck == 0.8.2
+        vector == 0.13.1.0
