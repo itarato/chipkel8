@@ -257,11 +257,12 @@ withDrawSprite x y n vm = vm {displayBuffer = newDisplayBuffer, regs = newRegs}
     newBytes = (V.!) _memory . (+ _iReg) <$> [0 .. (n - 1)]
     newBits = Prelude.concatMap byteToBits newBytes
     displayIndices = Prelude.concatMap (\v -> (+ (displayWidth * mod (yCoord + v) displayHeight)) . flip mod displayWidth . (+ xCoord) <$> [0 .. 7]) [0 .. (n - 1)]
-    currentDiplayBits = (V.!) _displayBuffer <$> displayIndices
-    currentDisplayBytes = bitsToByte <$> chunksOf 8 currentDiplayBits
+    currentDisplayBits = (V.!) _displayBuffer <$> displayIndices
+    currentDisplayBytes = bitsToByte <$> chunksOf 8 currentDisplayBits
     didErase = Prelude.any (\(a, b) -> (.&.) a b > 0) $ Prelude.zip newBytes currentDisplayBytes
     newRegs = (V.//) _regs [(0xF, if didErase then 1 else 0)]
-    newDisplayBuffer = (V.//) _displayBuffer $ Prelude.zip displayIndices newBits
+    newXoredBits = uncurry xor <$> Prelude.zip newBits currentDisplayBits
+    newDisplayBuffer = (V.//) _displayBuffer $ Prelude.zip displayIndices newXoredBits
 
 -- currentBytes = (V.!) _memory
 
