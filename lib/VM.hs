@@ -3,7 +3,8 @@ module VM where
 import Config
 import Control.Exception
 import Data.Bits
-import Data.List.Extra
+import Data.List
+import Data.List.Extra (chunksOf, foldl)
 import Data.Vector
 import qualified Data.Vector as V
 import Data.Word
@@ -360,15 +361,49 @@ withSaveMemoryToRegs regIdx vm = vm {regs = newRegs}
     changeset = Prelude.zip range values
     newRegs = (V.//) _regs changeset
 
+withSkipIfKeyPressed :: Input -> Int -> VM -> VM
+withSkipIfKeyPressed input regIdx vm = vm {pc = newPc}
+  where
+    _pc = pc vm
+    keyIdx = fromIntegral $ (V.!) (regs vm) regIdx
+    isKeyPressed = (V.!) input keyIdx
+    newPc = if isKeyPressed then _pc + 4 else _pc + 2
+
+withSkipIfKeyNotPressed :: Input -> Int -> VM -> VM
+withSkipIfKeyNotPressed input regIdx vm = vm {pc = newPc}
+  where
+    _pc = pc vm
+    keyIdx = fromIntegral $ (V.!) (regs vm) regIdx
+    isKeyPressed = (V.!) input keyIdx
+    newPc = if isKeyPressed then _pc + 4 else _pc + 2
+
+withWaitForKey :: Input -> Int -> VM -> VM
+withWaitForKey input regIdx vm = vm {regs = newRegs, pc = newPc}
+  where
+    _pc = pc vm
+    _regs = regs vm
+    keyIdx = V.findIndex id input
+    currentValue = (V.!) _regs regIdx
+    (newPc, newValue) = maybe (_pc, currentValue) (\i -> (_pc + 2, fromIntegral i)) keyIdx
+    newRegs = (V.//) _regs [(regIdx, newValue)]
+
 -- Chip-8 provides 2 timers, a delay timer and a sound timer.
 -- The delay timer is active whenever the delay timer register (DT) is non-zero. This timer does nothing more than subtract 1 from the value of DT at a rate of 60Hz. When DT reaches 0, it deactivates.
 -- The sound timer is active whenever the sound timer register (ST) is non-zero. This timer also decrements at a rate of 60Hz, however, as long as ST's value is greater than zero, the Chip-8 buzzer will sound. When ST reaches zero, the sound timer deactivates.
 -- The sound produced by the Chip-8 interpreter has only one tone. The frequency of this tone is decided by the author of the interpreter.
 updateTimers :: VM -> VM
-updateTimers = id -- TODO: Implement
+updateTimers vm = vm {soundReg = newSoundReg, timerReg = newTimerReg}
+  where
+    _soundReg = soundReg vm
+    _timerReg = timerReg vm
+    newSoundReg = if _soundReg > 0 then _soundReg - 1 else _soundReg
+    newTimerReg = if _timerReg > 0 then _timerReg - 1 else _timerReg
 
-updateInstruction :: VM -> VM
-updateInstruction vm
+updateInstructionBatch :: Int -> Input -> VM -> VM
+updateInstructionBatch instructionPerBatch input vm = Data.List.Extra.foldl (\vm _ -> updateInstruction input vm) vm [0 .. (instructionPerBatch - 1)]
+
+updateInstruction :: Input -> VM -> VM
+updateInstruction input vm
   -- 00E0 - CLS
   -- Clear the display.
   | opCodeWord == 0x00E0 = withClearedDisplay . withPCInc $ vm
@@ -471,11 +506,11 @@ updateInstruction vm
   -- Ex9E - SKP Vx
   -- Skip next instruction if key with the value of Vx is pressed.
   -- Checks the keyboard, and if the key corresponding to the value of Vx is currently in the down position, PC is increased by 2.
-  | opCodeHiNibHi == 0xE && opCodeLo == 0x9E = error "Not implemented (Ex9E - SKP Vx)"
+  | opCodeHiNibHi == 0xE && opCodeLo == 0x9E = withSkipIfKeyPressed input (fromIntegral opCodeHiNibLo) vm
   -- ExA1 - SKNP Vx
   -- Skip next instruction if key with the value of Vx is not pressed.
   -- Checks the keyboard, and if the key corresponding to the value of Vx is currently in the up position, PC is increased by 2.
-  | opCodeHiNibHi == 0xE && opCodeLo == 0xA1 = error "Not implemented (ExA1 - SKNP Vx)"
+  | opCodeHiNibHi == 0xE && opCodeLo == 0xA1 = withSkipIfKeyNotPressed input (fromIntegral opCodeHiNibLo) vm
   -- Fx07 - LD Vx, DT
   -- Set Vx = delay timer value.
   -- The value of DT is placed into Vx.
@@ -483,7 +518,7 @@ updateInstruction vm
   -- Fx0A - LD Vx, K
   -- Wait for a key press, store the value of the key in Vx.
   -- All execution stops until a key is pressed, then the value of that key is stored in Vx.
-  | opCodeHiNibHi == 0xF && opCodeLo == 0x0A = error "Not implemented (Fx0A - LD Vx, K)"
+  | opCodeHiNibHi == 0xF && opCodeLo == 0x0A = withWaitForKey input (fromIntegral opCodeHiNibLo) vm
   -- Fx15 - LD DT, Vx
   -- Set delay timer = Vx.
   -- DT is set equal to the value of Vx.

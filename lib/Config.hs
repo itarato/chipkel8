@@ -1,5 +1,9 @@
 module Config where
 
+import Data.Vector
+
+type Input = Vector Bool
+
 displayWidth :: Int
 displayWidth = 64
 
@@ -14,3 +18,6 @@ pixelSize = 4
 
 pixelSizeF :: Float
 pixelSizeF = fromIntegral pixelSize
+
+instructionPerBatch :: Int
+instructionPerBatch = 10
