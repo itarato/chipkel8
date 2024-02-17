@@ -11,3 +11,6 @@ displayBufferSize = displayWidth * displayHeight
 
 pixelSize :: Int
 pixelSize = 4
+
+pixelSizeF :: Float
+pixelSizeF = fromIntegral pixelSize

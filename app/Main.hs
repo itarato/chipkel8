@@ -4,38 +4,9 @@ import Config
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.Vector as V
 import Data.Word
-import Debug.Trace
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
-import VM (VM, initVM, sp, updateInstruction, updateTimers)
-
-{-
-
-Memory Map:
-+---------------+= 0xFFF (4095) End of Chip-8 RAM
-\|               |
-\|               |
-\|               |
-\|               |
-\|               |
-\| 0x200 to 0xFFF|
-\|     Chip-8    |
-\| Program / Data|
-\|     Space     |
-\|               |
-\|               |
-\|               |
-+- - - - - - - -+= 0x600 (1536) Start of ETI 660 Chip-8 programs
-\|               |
-\|               |
-\|               |
-+---------------+= 0x200 (512) Start of most Chip-8 programs
-\| 0x000 to 0x1FF|
-\| Reserved for  |
-\|  interpreter  |
-+---------------+= 0x000 (0) Start of Chip-8 RAM
-
--}
+import VM (VM (displayBuffer), initVM, updateInstruction, updateTimers)
 
 data App = MakeApp {vm :: VM, input :: V.Vector Bool}
 
@@ -43,18 +14,29 @@ initApp :: [Word8] -> App
 initApp _program = MakeApp {vm = initVM _program, input = V.replicate 16 False}
 
 updateApp :: Float -> App -> App
-updateApp _elapsed apps = apps {vm = newVm}
+updateApp _elapsed app = app {vm = newVm}
   where
-    newVm = updateTimers . updateInstruction $ vm apps
+    newVm = updateTimers . updateInstruction $ vm app
 
 window :: Display
 window = InWindow "Chip8" (displayWidth * pixelSize, displayHeight * pixelSize) (100, 100)
 
 render :: App -> Picture
-render app = pictures []
+render app = pictures $ V.toList $ pictureOfPixelWithCoord <$> filteredCoordsAndPixels
+  where
+    _displayBuffer = displayBuffer $ vm app
+    coords = (\i -> (mod i displayWidth, div i displayWidth)) <$> V.fromList [0 .. (displayWidth * displayHeight - 1)]
+    coordsAndPixels = V.zip coords _displayBuffer
+    filteredCoordsAndPixels = V.filter (\(_, v) -> v == 1) coordsAndPixels
+
+pictureOfPixelWithCoord :: ((Int, Int), Word8) -> Picture
+pictureOfPixelWithCoord ((x, y), _) = translate (fromIntegral _x) (fromIntegral _y) $ color white $ rectangleSolid pixelSizeF pixelSizeF
+  where
+    _x = (x - div displayWidth 2) * pixelSize
+    _y = (div displayHeight 2 - y) * pixelSize
 
 handleEvent :: Event -> App -> App
-handleEvent _event appa = appa
+handleEvent _event = id
 
 main :: IO ()
 main = do

@@ -1,6 +1,8 @@
 Chip8 Emulator
 --------------
 
+![Screenshot](./misc/screenshot.png)
+
 ## Setup
 
 - https://www.haskell.org/ghcup/
