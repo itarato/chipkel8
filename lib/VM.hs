@@ -1,3 +1,5 @@
+{-# LANGUAGE BinaryLiterals #-}
+
 module VM where
 
 import Config
@@ -126,7 +128,7 @@ withReturnFromStack vm = vm {pc = newPC, sp = newSP}
     _pc = pc vm
     _sp = sp vm
     _stack = stack vm
-    newPC = (V.!) _stack (fromIntegral _sp + 1)
+    newPC = assert (_sp <= 0xE) $ (V.!) _stack (fromIntegral _sp + 1)
     newSP = _sp + 1
 
 withCall :: Word16 -> VM -> VM
@@ -256,7 +258,7 @@ withShiftLeftReg regIdx vm = vm {regs = newRegs}
   where
     _regs = regs vm
     regVal = (V.!) _regs regIdx
-    newVF = (.&.) regVal 0x80
+    newVF = shiftR regVal 7
     newRegs = (V.//) _regs [(regIdx, shiftL regVal 1), (0xF, newVF)]
 
 withRegISet :: Word16 -> VM -> VM
@@ -434,7 +436,7 @@ updateInstruction input vm
   -- 5xy0 - SE Vx, Vy
   -- Skip next instruction if Vx = Vy.
   -- The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
-  | opCodeHiNibHi == 5 && opCodeLoNibLo == 0 = withSkipInstructionIfTwoRegsEqual (fromIntegral opCodeLoNibHi) (fromIntegral opCodeHiNibLo) vm
+  | opCodeHiNibHi == 5 && opCodeLoNibLo == 0 = withSkipInstructionIfTwoRegsEqual (fromIntegral opCodeHiNibLo) (fromIntegral opCodeLoNibHi) vm
   -- 6xkk - LD Vx, byte
   -- Set Vx = kk.
   -- The interpreter puts the value kk into register Vx.
