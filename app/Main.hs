@@ -7,7 +7,7 @@ import Data.Word
 import Debug.Trace
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
-import VM (VM, initVM, updateInstruction, updateTimers)
+import VM (VM, initVM, sp, updateInstruction, updateTimers)
 
 {-
 
@@ -37,27 +37,26 @@ Memory Map:
 
 -}
 
-data Appx = MakeAppx {vmx :: VM, inputs :: V.Vector Bool}
+data App = MakeApp {vm :: VM, input :: V.Vector Bool}
 
-initAppx :: [Word8] -> Appx
-initAppx _program = MakeAppx {vmx = initVM _program, inputs = V.replicate 16 False}
+initApp :: [Word8] -> App
+initApp _program = MakeApp {vm = initVM _program, input = V.replicate 16 False}
 
-updateAppx :: Float -> Appx -> Appx
-updateAppx _elapsed apps = apps {vmx = newVm}
+updateApp :: Float -> App -> App
+updateApp _elapsed apps = apps {vm = newVm}
   where
-    _vm = (trace "dcon" (vmx apps))
-    newVm = updateTimers . updateInstruction $ (trace "vm" _vm)
+    newVm = updateTimers . updateInstruction $ vm apps
 
 window :: Display
 window = InWindow "Chip8" (displayWidth * pixelSize, displayHeight * pixelSize) (100, 100)
 
-render :: Appx -> Picture
-render _app = pictures []
+render :: App -> Picture
+render app = pictures []
 
-handleEvent :: Event -> Appx -> Appx
+handleEvent :: Event -> App -> App
 handleEvent _event appa = appa
 
 main :: IO ()
 main = do
   _program <- BS.unpack <$> BS.readFile "roms/spaceinvader.ch8"
-  play window black 60 (initAppx _program) render handleEvent updateAppx
+  play window black 60 (initApp _program) render handleEvent updateApp
