@@ -375,7 +375,7 @@ withSkipIfKeyNotPressed input regIdx vm = vm {pc = newPc}
     _pc = pc vm
     keyIdx = fromIntegral $ (V.!) (regs vm) regIdx
     isKeyPressed = (V.!) input keyIdx
-    newPc = if isKeyPressed then _pc + 4 else _pc + 2
+    newPc = if isKeyPressed then _pc + 2 else _pc + 4
 
 withWaitForKey :: Input -> Int -> VM -> VM
 withWaitForKey input regIdx vm = vm {regs = newRegs, pc = newPc}
