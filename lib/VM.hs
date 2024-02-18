@@ -322,7 +322,7 @@ withAddRegToRegI regIdx vm = vm {iReg = newIReg}
     _iReg = iReg vm
     _regs = regs vm
     value = (fromIntegral $ (V.!) _regs regIdx) :: Word16
-    newIReg = value + _iReg
+    newIReg = assert (value + _iReg < 0x1000 && value < 0x1000) (value + _iReg)
 
 withSetIToSpriteLocation :: Int -> VM -> VM
 withSetIToSpriteLocation regIdx vm = vm {iReg = newIReg}
@@ -344,24 +344,26 @@ withSetDecimalDigitsOfReg regIdx vm = vm {memory = newMemory}
     newMemory = (V.//) _memory [(_iReg, hundreds :: Word8), (_iReg + 1, tens :: Word8), (_iReg + 2, ones :: Word8)]
 
 withSaveRegsToMemory :: Int -> VM -> VM
-withSaveRegsToMemory regIdx vm = vm {memory = newMemory}
+withSaveRegsToMemory regIdx vm = vm {memory = newMemory, iReg = newIReg}
   where
     _memory = memory vm
     _regs = fromIntegral <$> regs vm
     _iReg = fromIntegral $ iReg vm
-    changeset = Prelude.zip ((+ _iReg) <$> [0 .. (regIdx - 1)]) (toList _regs)
+    changeset = Prelude.zip ((+ _iReg) <$> [0 .. regIdx]) (toList _regs)
     newMemory = (V.//) _memory changeset
+    newIReg = fromIntegral (_iReg + regIdx + 1)
 
 withSaveMemoryToRegs :: Int -> VM -> VM
-withSaveMemoryToRegs regIdx vm = vm {regs = newRegs}
+withSaveMemoryToRegs regIdx vm = vm {regs = newRegs, iReg = newIReg}
   where
     _iReg = fromIntegral $ iReg vm
     _memory = memory vm
     _regs = regs vm
-    range = [0 .. (regIdx - 1)]
+    range = [0 .. regIdx]
     values = (V.!) _memory <$> ((+ _iReg) <$> range)
     changeset = Prelude.zip range values
     newRegs = (V.//) _regs changeset
+    newIReg = fromIntegral (_iReg + regIdx + 1)
 
 withSkipIfKeyPressed :: Input -> Int -> VM -> VM
 withSkipIfKeyPressed input regIdx vm = vm {pc = newPc}
