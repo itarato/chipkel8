@@ -555,7 +555,7 @@ updateInstruction input vm
   | opCodeHiNibHi == 0xF && opCodeLo == 0x65 = withSaveMemoryToRegs (fromIntegral opCodeHiNibLo) . withPCInc $ vm
   | otherwise = trace ("Opcode not implemented: " Prelude.++ show opCodeWord) vm
   where
-    (opCodeHi, opCodeLo) = traceOpcode (pc vm) $ opCode vm
+    (opCodeHi, opCodeLo) = traceOpcode (pc vm) (opCode vm)
     opCodeHiNibHi = shiftR opCodeHi 4 --  0xX...
     opCodeHiNibLo = (.&.) opCodeHi 0xF -- 0x.X..
     opCodeLoNibHi = shiftR opCodeLo 4 --  0x..X.

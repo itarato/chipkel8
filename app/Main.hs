@@ -43,8 +43,8 @@ pictureOfPixelWithCoord ((x, y), _) = translate (fromIntegral _x) (fromIntegral 
 
 getKey :: Event -> Maybe (Char, Bool)
 getKey (EventKey key keyState _ _)
-  | (Char c) <- key, Down <- keyState = Just (c, False)
-  | (Char c) <- key, Up <- keyState = Just (c, True)
+  | (Char c) <- key, Down <- keyState = Just (c, True)
+  | (Char c) <- key, Up <- keyState = Just (c, False)
 getKey _ = Nothing
 
 getKeyIdx :: Char -> Maybe Int
