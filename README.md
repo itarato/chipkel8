@@ -1,7 +1,7 @@
 Chip8 Emulator
 --------------
 
-![Screenshot](./misc/screenshot.png)
+![Screenshot](./misc/chip8.gif)
 
 ## Setup
 
