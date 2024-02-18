@@ -7,8 +7,10 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Maybe
 import qualified Data.Vector as V
 import Data.Word
+import Debug.Trace (traceShowId)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
+import System.Environment
 import VM (VM (displayBuffer), initVM, updateInstructionBatch, updateTimers)
 
 data App = MakeApp {vm :: VM, input :: Input}
@@ -47,21 +49,21 @@ getKey _ = Nothing
 
 getKeyIdx :: Char -> Maybe Int
 getKeyIdx c = case c of
-  '0' -> Just 0
-  '1' -> Just 1
-  '2' -> Just 2
-  '3' -> Just 3
+  '0' -> Just 13
+  '1' -> Just 0
+  '2' -> Just 1
+  '3' -> Just 2
   '4' -> Just 4
   '5' -> Just 5
   '6' -> Just 6
-  '7' -> Just 7
-  '8' -> Just 8
-  '9' -> Just 9
-  'a' -> Just 10
-  'b' -> Just 11
-  'c' -> Just 12
-  'd' -> Just 13
-  'e' -> Just 14
+  '7' -> Just 8
+  '8' -> Just 9
+  '9' -> Just 10
+  'a' -> Just 12
+  'b' -> Just 14
+  'c' -> Just 3
+  'd' -> Just 7
+  'e' -> Just 11
   'f' -> Just 15
   _ -> Nothing
 
@@ -74,5 +76,9 @@ handleEvent event app = app {input = newInput}
 
 main :: IO ()
 main = do
-  _program <- BS.unpack <$> BS.readFile "roms/spaceinvader.ch8"
-  play window black 60 (initApp _program) render handleEvent updateApp
+  args <- getArgs
+  if null $ traceShowId args
+    then print "Missing rom file name"
+    else do
+      _program <- BS.unpack <$> BS.readFile (head args)
+      play window black 60 (initApp _program) render handleEvent updateApp
