@@ -4,6 +4,9 @@ import Data.Vector
 
 type Input = Vector Bool
 
+fps :: Int
+fps = 30
+
 displayWidth :: Int
 displayWidth = 64
 

@@ -12,6 +12,7 @@ import qualified Data.Vector as V
 import Data.Word
 import Debug.Trace (trace, traceId, traceShowId)
 import Shared
+import System.Random
 import Text.Printf
 
 {-
@@ -55,7 +56,8 @@ data VM = MakeVM
     iReg :: Word16,
     soundReg :: Word8,
     timerReg :: Word8,
-    displayBuffer :: V.Vector Word8
+    displayBuffer :: V.Vector Word8,
+    randGen :: StdGen
   }
   deriving (Show)
 
@@ -102,7 +104,8 @@ initVM _program =
       iReg = 0,
       soundReg = 0,
       timerReg = 0,
-      displayBuffer = initDisplayBuffer
+      displayBuffer = initDisplayBuffer,
+      randGen = mkStdGen 42
     }
 
 opCode :: VM -> (Word8, Word8)
@@ -273,7 +276,11 @@ withJumpValPlusV0 value vm = vm {pc = newPC}
     newPC = (fromIntegral v0 :: Word16) + value
 
 withRandomReg :: Int -> Word8 -> VM -> VM
-withRandomReg = error "Not implemented (withRandomReg)"
+withRandomReg regIdx mask vm = vm {regs = newRegs, randGen = newRandGen}
+  where
+    _regs = regs vm
+    (randNum, newRandGen) = genWord8 $ randGen vm
+    newRegs = (V.//) _regs [(regIdx, (.&.) randNum mask)]
 
 withDrawSprite :: Int -> Int -> Int -> VM -> VM
 withDrawSprite x y n vm = vm {displayBuffer = newDisplayBuffer, regs = newRegs}
@@ -497,7 +504,8 @@ updateInstruction input vm
   | opCodeHiNibHi == 0xB = withJumpValPlusV0 opCodeLo3Nibs vm
   -- Cxkk - RND Vx, byte
   -- Set Vx = random byte AND kk.
-  -- The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk. The results are stored in Vx. See instruction 8xy2 for more information on AND.
+  -- The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk.
+  -- The results are stored in Vx. See instruction 8xy2 for more information on AND.
   | opCodeHiNibHi == 0xC = withRandomReg (fromIntegral opCodeHiNibLo) opCodeLo . withPCInc $ vm
   -- Dxyn - DRW Vx, Vy, nibble
   -- Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.

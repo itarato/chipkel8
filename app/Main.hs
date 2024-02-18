@@ -81,4 +81,4 @@ main = do
     then print "Missing rom file name"
     else do
       _program <- BS.unpack <$> BS.readFile (head args)
-      play window black 60 (initApp _program) render handleEvent updateApp
+      play window black fps (initApp _program) render handleEvent updateApp
