@@ -23,4 +23,4 @@ pixelSizeF :: Float
 pixelSizeF = fromIntegral pixelSize
 
 instructionPerBatch :: Int
-instructionPerBatch = 16
+instructionPerBatch = 24

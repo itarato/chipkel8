@@ -72,8 +72,7 @@ traceWithName :: (Show a) => String -> a -> a
 traceWithName msg v = trace (msg Prelude.++ ": " Prelude.++ show v) v
 
 traceOpcode :: Word16 -> (Word8, Word8) -> (Word8, Word8)
--- traceOpcode _pc (a, b) = trace (printf "\x1B[93mPC\x1B[0m %04X \x1B[90m=>\x1B[0m \x1B[93mOP\x1B[0m %02X%02X" _pc a b) (a, b)
-traceOpcode _ = id
+traceOpcode _pc (a, b) = trace (printf "\x1B[93mPC\x1B[0m %04X \x1B[90m=>\x1B[0m \x1B[93mOP\x1B[0m %02X%02X" _pc a b) (a, b)
 
 initMemory :: [Word8] -> V.Vector Word8
 initMemory program = _memory

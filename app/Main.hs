@@ -9,6 +9,7 @@ import qualified Data.Vector as V
 import Data.Word
 import Debug.Trace (traceShowId)
 import Graphics.Gloss
+import Graphics.Gloss.Interface.Environment
 import Graphics.Gloss.Interface.IO.Interact
 import System.Environment
 import VM (VM (displayBuffer), initVM, updateInstructionBatch, updateTimers)
@@ -24,8 +25,13 @@ updateApp _elapsed app = app {vm = newVm}
     _input = input app
     newVm = updateTimers . updateInstructionBatch instructionPerBatch _input $ vm app
 
-window :: Display
-window = InWindow "Chip8" (displayWidth * pixelSize, displayHeight * pixelSize) (100, 100)
+window :: Int -> Int -> Display
+window screenW screenH = InWindow "Chip8 (in Haskell)" (w, h) (posX, posY)
+  where
+    w = (displayWidth + 1) * pixelSize
+    h = (displayHeight + 1) * pixelSize
+    posX = div (screenW - w) 2
+    posY = div (screenH - h) 2
 
 render :: App -> Picture
 render app = pictures $ V.toList $ pictureOfPixelWithCoord <$> filteredCoordsAndPixels
@@ -38,8 +44,8 @@ render app = pictures $ V.toList $ pictureOfPixelWithCoord <$> filteredCoordsAnd
 pictureOfPixelWithCoord :: ((Int, Int), Word8) -> Picture
 pictureOfPixelWithCoord ((x, y), _) = translate (fromIntegral _x) (fromIntegral _y) $ color white $ rectangleSolid pixelSizeF pixelSizeF
   where
-    _x = (x - div displayWidth 2) * pixelSize
-    _y = (div displayHeight 2 - y) * pixelSize
+    _x = (x - div displayWidth 2) * pixelSize + div pixelSize 2
+    _y = (div displayHeight 2 - y) * pixelSize - div pixelSize 2
 
 getKey :: Event -> Maybe (Char, Bool)
 getKey (EventKey key keyState _ _)
@@ -80,5 +86,6 @@ main = do
   if null $ traceShowId args
     then print "Missing rom file name"
     else do
+      (screenW, screenH) <- getScreenSize
       _program <- BS.unpack <$> BS.readFile (head args)
-      play window black fps (initApp _program) render handleEvent updateApp
+      play (window screenW screenH) black fps (initApp _program) render handleEvent updateApp
