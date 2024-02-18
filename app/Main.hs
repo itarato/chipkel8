@@ -49,22 +49,22 @@ getKey _ = Nothing
 
 getKeyIdx :: Char -> Maybe Int
 getKeyIdx c = case c of
-  '0' -> Just 13
   '1' -> Just 0
   '2' -> Just 1
   '3' -> Just 2
-  '4' -> Just 4
-  '5' -> Just 5
-  '6' -> Just 6
-  '7' -> Just 8
-  '8' -> Just 9
-  '9' -> Just 10
-  'a' -> Just 12
-  'b' -> Just 14
-  'c' -> Just 3
-  'd' -> Just 7
-  'e' -> Just 11
-  'f' -> Just 15
+  '4' -> Just 3
+  'q' -> Just 4
+  'w' -> Just 5
+  'e' -> Just 6
+  'r' -> Just 7
+  'a' -> Just 8
+  's' -> Just 9
+  'd' -> Just 10
+  'f' -> Just 11
+  'z' -> Just 12
+  'x' -> Just 13
+  'c' -> Just 14
+  'v' -> Just 15
   _ -> Nothing
 
 handleEvent :: Event -> App -> App

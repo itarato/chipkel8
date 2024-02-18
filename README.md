@@ -2,6 +2,9 @@ Chip8 Emulator
 --------------
 
 ![Screenshot](./misc/chip8.gif)
+![Screenshot](./misc/pong.gif)
+![Screenshot](./misc/tetris.gif)
+![Screenshot](./misc/breakout.gif)
 
 ## Setup
 

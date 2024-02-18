@@ -5,7 +5,7 @@ import Data.Vector
 type Input = Vector Bool
 
 fps :: Int
-fps = 30
+fps = 24
 
 displayWidth :: Int
 displayWidth = 64
@@ -23,4 +23,4 @@ pixelSizeF :: Float
 pixelSizeF = fromIntegral pixelSize
 
 instructionPerBatch :: Int
-instructionPerBatch = 24
+instructionPerBatch = 16
